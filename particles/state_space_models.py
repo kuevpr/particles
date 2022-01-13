@@ -231,15 +231,15 @@ class StateSpaceModel(object):
             shape.append(dim)
         return np.empty(shape, dtype=law_X0.dtype)
 
-    def PX0(self):
+    def PX0(self, data=None):
         "Law of X_0 at time 0"
         raise NotImplementedError(self._error_msg('PX0'))
 
-    def PX(self, t, xp):
+    def PX(self, t, xp, data=None):
         " Law of X_t at time t, given X_{t-1} = xp"
         raise NotImplementedError(self._error_msg('PX'))
 
-    def PY(self, t, xp, x):
+    def PY(self, t, xp, x, data=None):
         """Conditional distribution of Y_t, given the states.
         """
         raise NotImplementedError(self._error_msg('PY'))
@@ -315,33 +315,57 @@ class Bootstrap(particles.FeynmanKac):
         the Feynman-Kac representation of the bootstrap filter for the
         considered state-space model
     """
-    def __init__(self, ssm=None, data=None):
+    def __init__(self, ssm=None, data=None, input_T = None, prince_method = False):
+        print("Prince Version of the code")
         self.ssm = ssm
         self.data = data
-        self.du = self.ssm.PX0().dim
+        self.input_T = input_T
+        self.prince_method = prince_method
+        # self.du = self.ssm.PX0().dim
 
     @property
     def T(self):
-        return 0 if self.data is None else len(self.data)
+        if self.input_T is None:
+            return 0 if self.data is None else len(self.data)
+        else:
+            return self.input_T
 
     def M0(self, N):
-        return self.ssm.PX0().rvs(size=N)
+        if not self.prince_method:
+            return self.ssm.PX0().rvs(size=N)
+        else:
+            return self.ssm.PX0(self.data).rvs(size=N)
 
     def M(self, t, xp):
-        return self.ssm.PX(t, xp).rvs(size=xp.shape[0])
+        if not self.prince_method:
+            return self.ssm.PX(t, xp).rvs(size=xp.shape[0])
+        else:
+            return self.ssm.PX(t, xp, self.data).rvs(size=xp.shape[0])
 
     def logG(self, t, xp, x):
-        return self.ssm.PY(t, xp, x).logpdf(self.data[t])
+        if not self.prince_method:
+            return self.ssm.PY(t, xp, x).logpdf(self.data[t])
+        else:
+            return self.ssm.PY(t, xp, x, self.data).logpdf(self.data['gt_pos'][:, t])
 
     def Gamma0(self, u):
-        return self.ssm.PX0().ppf(u)
+        if not self.prince_method:
+            return self.ssm.PX0().ppf(u)
+        else:
+            return self.ssm.PX0(self.data).ppf(u)
 
     def Gamma(self, t, xp, u):
-        return self.ssm.PX(t, xp).ppf(u)
+        if not self.prince_method:
+            return self.ssm.PX(t, xp).ppf(u)
+        else:
+            return self.ssm.PX(t, xp, self.data).ppf(u)
 
     def logpt(self, t, xp, x):
         """PDF of X_t|X_{t-1}=xp"""
-        return self.ssm.PX(t, xp).logpdf(x)
+        if not self.prince_method:
+            return self.ssm.PX(t, xp).logpdf(x)
+        else:
+            return self.ssm.PX(t, xp, self.data).logpdf(x)
 
     def upper_bound_trans(self, t):
         return self.ssm.upper_bound_log_pt(t)
