@@ -274,7 +274,11 @@ class SMC(object):
                  ESSrmin=0.5,
                  store_history=False,
                  verbose=False,
-                 collect=None):
+                 collect=None,
+                 data=None):
+
+        if data != None:
+            self.data = data
 
         self.fk = fk
         self.N = N
@@ -308,6 +312,12 @@ class SMC(object):
     def reset_weights(self):
         """Reset weights after a resampling step.
         """
+        if self.fk.prince_method:
+            w = np.ones(self.N) / self.N
+            lw = np.log(w)
+            self.wgts = rs.Weights(lw=lw)
+            return
+
         if self.fk.isAPF:
             lw = (rs.log_mean_exp(self.logetat, W=self.W)
                   - self.logetat[self.A])
@@ -391,7 +401,15 @@ class SMC(object):
                 self.resample_move_qmc()
             else:
                 self.resample_move()
-        self.reweight_particles()
+
+        # Difference between this iteration's magnetic field meas and last iteration's meas
+        mag_diff = self.data['mag_pni_meas_world'][:,self.t] - self.data['mag_pni_prev']
+        self.data['mag_pni_prev'] = self.data['mag_pni_meas_world'][:,self.t]
+
+        # If last meas is idential to current, leave. This means we don't have new information
+        if np.linalg.norm(mag_diff.numpy()) != 0.:
+            self.reweight_particles()
+
         self.compute_summaries()
         self.t += 1
 
