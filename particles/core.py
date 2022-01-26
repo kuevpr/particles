@@ -312,7 +312,9 @@ class SMC(object):
     def reset_weights(self):
         """Reset weights after a resampling step.
         """
-        if self.fk.prince_method:
+        always_update_weights = self.data['always_update_weights']
+
+        if (not always_update_weights) and self.fk.prince_method:
             w = np.ones(self.N) / self.N
             lw = np.log(w)
             self.wgts = rs.Weights(lw=lw)
@@ -406,8 +408,13 @@ class SMC(object):
         mag_diff = self.data['mag_pni_meas_world'][:,self.t] - self.data['mag_pni_prev']
         self.data['mag_pni_prev'] = self.data['mag_pni_meas_world'][:,self.t]
 
-        # If last meas is idential to current, leave. This means we don't have new information
-        if np.linalg.norm(mag_diff.numpy()) != 0.:
+        
+        # Only re-weight particles if magnetometer data is actually a new measurement OR if we just resampled
+        # If we just resampled, weights have been reset. It's better to update weights on slightly old mag data rather than not update the weights at all
+        mag_meas_is_new = np.linalg.norm(mag_diff.numpy()) != 0.
+        just_resampled = self.rs_flag
+        always_update_weights = self.data['always_update_weights']
+        if always_update_weights or just_resampled or mag_meas_is_new:
             self.reweight_particles()
 
         self.compute_summaries()
