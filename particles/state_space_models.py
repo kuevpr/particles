@@ -346,7 +346,9 @@ class Bootstrap(particles.FeynmanKac):
         if not self.prince_method:
             return self.ssm.PY(t, xp, x).logpdf(self.data[t])
         else:
-            return self.ssm.PY(t, xp, x, self.data).logpdf(self.data['gt_pos'][:, t])
+            # This is an obtuse way of making a zero vector, but it ensures I preserve Numpy Array vs Pytorch Tensor consistency
+            zero_vec = self.data['mag_pni_meas_world'][:, t]*0
+            return self.ssm.PY(t, xp, x, self.data).logpdf(zero_vec)
 
     def Gamma0(self, u):
         if not self.prince_method:
