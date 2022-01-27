@@ -342,13 +342,24 @@ class Bootstrap(particles.FeynmanKac):
         else:
             return self.ssm.PX(t, xp, self.data).rvs(size=xp.shape[0])
 
-    def logG(self, t, xp, x):
+    def logG(self, t, xp, x, meas_type = None):
         if not self.prince_method:
             return self.ssm.PY(t, xp, x).logpdf(self.data[t])
         else:
             # This is an obtuse way of making a zero vector, but it ensures I preserve Numpy Array vs Pytorch Tensor consistency
             zero_vec = self.data['mag_pni_meas_world'][:, t]*0
-            return self.ssm.PY(t, xp, x, self.data).logpdf(zero_vec)
+
+            if meas_type == 'mag':
+                # Evaluate each particle's distribution at zero
+                return self.ssm.PY_mag(t, xp, x, self.data).logpdf(zero_vec)
+            elif meas_type == 'gt_x':
+                return self.ssm.PY_gt_x(t, xp, x, self.data).logpdf(zero_vec)
+            elif meas_type == 'gt_y':
+                return self.ssm.PY_gt_y(t, xp, x, self.data).logpdf(zero_vec)
+            elif meas_type == 'gt_z':
+                return self.ssm.PY_gt_z(t, xp, x, self.data).logpdf(zero_vec)
+            else:
+                print("Non-valid 'meas_type' in 'logG()'")
 
     def Gamma0(self, u):
         if not self.prince_method:

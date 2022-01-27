@@ -345,7 +345,33 @@ class SMC(object):
             self.X = self.fk.M0(self.N)
 
     def reweight_particles(self):
-        self.wgts = self.wgts.add(self.fk.logG(self.t, self.Xp, self.X))
+
+        ##### Mag Update #####
+        # Difference between this iteration's magnetic field meas and last iteration's meas
+        mag_diff = self.data['mag_pni_meas_world'][:,self.t] - self.data['mag_pni_prev']
+        self.data['mag_pni_prev'] = self.data['mag_pni_meas_world'][:,self.t]
+
+        
+        # Only re-weight particles if magnetometer data is actually a new measurement OR if we just resampled
+        # If we just resampled, weights have been reset. It's better to update weights on slightly old mag data rather than not update the weights at all
+        mag_meas_is_new = np.linalg.norm(mag_diff.numpy()) != 0.
+        just_resampled = self.rs_flag
+        always_update_weights = self.data['always_update_weights']
+        if always_update_weights or just_resampled or mag_meas_is_new:
+            self.wgts = self.wgts.add(self.fk.logG(self.t, self.Xp, self.X, meas_type = 'mag'))
+
+        ##### X Position Update #####
+        if self.data['use_gt_x_meas']:
+            self.wgts = self.wgts.add(self.fk.logG(self.t, self.Xp, self.X, meas_type = 'gt_x'))
+
+        ##### Y Position Update #####
+        if self.data['use_gt_y_meas']:
+            self.wgts = self.wgts.add(self.fk.logG(self.t, self.Xp, self.X, meas_type = 'gt_y'))
+
+        ##### Z Position Update #####
+        if self.data['use_gt_z_meas']:
+            self.wgts = self.wgts.add(self.fk.logG(self.t, self.Xp, self.X, meas_type = 'gt_z'))
+
 
     def resample_move(self):
         self.rs_flag = self.fk.time_to_resample(self)
@@ -404,18 +430,7 @@ class SMC(object):
             else:
                 self.resample_move()
 
-        # Difference between this iteration's magnetic field meas and last iteration's meas
-        mag_diff = self.data['mag_pni_meas_world'][:,self.t] - self.data['mag_pni_prev']
-        self.data['mag_pni_prev'] = self.data['mag_pni_meas_world'][:,self.t]
-
-        
-        # Only re-weight particles if magnetometer data is actually a new measurement OR if we just resampled
-        # If we just resampled, weights have been reset. It's better to update weights on slightly old mag data rather than not update the weights at all
-        mag_meas_is_new = np.linalg.norm(mag_diff.numpy()) != 0.
-        just_resampled = self.rs_flag
-        always_update_weights = self.data['always_update_weights']
-        if always_update_weights or just_resampled or mag_meas_is_new:
-            self.reweight_particles()
+        self.reweight_particles()
 
         self.compute_summaries()
         self.t += 1
