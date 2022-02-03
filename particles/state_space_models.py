@@ -347,7 +347,7 @@ class Bootstrap(particles.FeynmanKac):
             return self.ssm.PY(t, xp, x).logpdf(self.data[t])
         else:
             # This is an obtuse way of making a zero vector, but it ensures I preserve Numpy Array vs Pytorch Tensor consistency
-            zero_vec = self.data['mag_pni_meas_world'][:, t]*0
+            zero_vec = self.data['mag_pni_meas_world'][t, :]*0
 
             if meas_type == 'mag':
                 # Evaluate each particle's distribution at zero

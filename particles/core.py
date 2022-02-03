@@ -348,8 +348,8 @@ class SMC(object):
 
         ##### Mag Update #####
         # Difference between this iteration's magnetic field meas and last iteration's meas
-        mag_diff = self.data['mag_pni_meas_world'][:,self.t] - self.data['mag_pni_prev']
-        self.data['mag_pni_prev'] = self.data['mag_pni_meas_world'][:,self.t]
+        mag_diff = self.data['mag_pni_meas_world'][self.t,:] - self.data['mag_pni_prev']
+        self.data['mag_pni_prev'] = self.data['mag_pni_meas_world'][self.t,:]
 
         
         # Only re-weight particles if magnetometer data is actually a new measurement OR if we just resampled
