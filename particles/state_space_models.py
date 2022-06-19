@@ -352,12 +352,16 @@ class Bootstrap(particles.FeynmanKac):
             if meas_type == 'mag':
                 # Evaluate each particle's distribution at zero
                 return self.ssm.PY_mag(t, xp, x, self.data).logpdf(zero_vec)
+            elif meas_type == 'nothing':
+                return self.ssm.PY_nothing(t, xp, x, self.data).logpdf(zero_vec)
             elif meas_type == 'gt_x':
                 return self.ssm.PY_gt_x(t, xp, x, self.data).logpdf(zero_vec)
             elif meas_type == 'gt_y':
                 return self.ssm.PY_gt_y(t, xp, x, self.data).logpdf(zero_vec)
             elif meas_type == 'gt_z':
                 return self.ssm.PY_gt_z(t, xp, x, self.data).logpdf(zero_vec)
+            elif meas_type == 'alt':
+                return self.ssm.PY_altimeter(t, xp, x, self.data).logpdf(zero_vec)
             else:
                 print("Non-valid 'meas_type' in 'logG()'")
 

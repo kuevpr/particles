@@ -357,9 +357,15 @@ class SMC(object):
         mag_meas_is_new = np.linalg.norm(mag_diff.numpy()) != 0.
         just_resampled = self.rs_flag
         always_update_weights = self.data['always_update_weights']
-        if always_update_weights or just_resampled or mag_meas_is_new:
-            self.wgts = self.wgts.add(self.fk.logG(self.t, self.Xp, self.X, meas_type = 'mag'))
+        ignore_mag_meas = self.data['ignore_mag_meas']
 
+        ##### Magnetometer Update #####
+        if ignore_mag_meas:
+            self.wgts = self.wgts.add(self.fk.logG(self.t, self.Xp, self.X, meas_type = 'nothing'))
+        else:
+            if always_update_weights or just_resampled or mag_meas_is_new:
+                self.wgts = self.wgts.add(self.fk.logG(self.t, self.Xp, self.X, meas_type = 'mag'))
+            
         ##### X Position Update #####
         if self.data['use_gt_x_meas']:
             self.wgts = self.wgts.add(self.fk.logG(self.t, self.Xp, self.X, meas_type = 'gt_x'))
@@ -371,6 +377,10 @@ class SMC(object):
         ##### Z Position Update #####
         if self.data['use_gt_z_meas']:
             self.wgts = self.wgts.add(self.fk.logG(self.t, self.Xp, self.X, meas_type = 'gt_z'))
+
+        ##### Altimeter Measurement Update #####
+        if self.data['use_altimeter']:
+            self.wgts = self.wgts.add(self.fk.logG(self.t, self.Xp, self.X, meas_type = 'alt'))
 
 
     def resample_move(self):

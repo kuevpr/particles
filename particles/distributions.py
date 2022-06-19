@@ -757,11 +757,20 @@ class MvNormal(ProbDist):
         err_msg = 'mvnorm: argument cov must be a dxd ndarray, \
                 with d>1, defining a symmetric positive matrix'
         try:
-            self.L = cholesky(self.cov, lower=True)  # L*L.T = cov
-            self.halflogdetcor = np.sum(np.log(np.diag(self.L)))
+            if self.cov.dim() == 3:
+                self.L = np.linalg.cholesky(self.cov)
+                self.halflogdetcor = np.sum(self.L[:,(0,1,2),(0,1,2)], axis=1).shape
+                # self.L = np.array(self.cov * 0 )
+                # self.halflogdetcor = np.zeros(self.dim)
+                # for i in range(self.dim):
+                #     self.L[i,:,:] = cholesky(self.cov[i,:,:], lower=True)
+                #     self.halflogdetcor[i] = np.sum(np.log(np.diag(self.L[i,:,:])))
+            else:
+                self.L = cholesky(self.cov, lower=True)  # L*L.T = cov
+                self.halflogdetcor = np.sum(np.log(np.diag(self.L)))
         except:
             raise ValueError(err_msg)
-        assert self.cov.shape == (self.dim, self.dim), err_msg
+        assert self.cov.shape == (self.dim, self.dim) or self.cov.shape == (self.dim, 3, 3), err_msg
 
     @property
     def dim(self):
@@ -771,8 +780,15 @@ class MvNormal(ProbDist):
         return self.loc + self.scale * np.dot(z, self.L.T)
 
     def logpdf(self, x):
-        z = solve_triangular(self.L, np.transpose((x - self.loc) / self.scale),
-                             lower=True)
+        if self.L.ndim == 3:
+            z = np.transpose(np.linalg.solve(self.L, (x - self.loc / self.scale)))
+            # z = np.zeros((3, self.dim))
+            # for i in range(self.dim):
+            #     z[:,i] = solve_triangular(self.L[i,:,:], np.transpose((x - self.loc[i,:]) / self.scale), lower=True)
+        else:
+            z = solve_triangular(self.L, np.transpose((x - self.loc) / self.scale),
+                                lower=True)
+
         # z is dxN, not Nxd
         if np.asarray(self.scale).ndim == 0:
             logdet = self.dim * np.log(self.scale)
