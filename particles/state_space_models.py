@@ -362,6 +362,8 @@ class Bootstrap(particles.FeynmanKac):
                 return self.ssm.PY_gt_z(t, xp, x, self.data).logpdf(zero_vec)
             elif meas_type == 'alt':
                 return self.ssm.PY_altimeter(t, xp, x, self.data).logpdf(zero_vec)
+            elif meas_type == 'constrain':
+                return self.ssm.PY_constrain(t, xp, x, self.data)
             else:
                 print("Non-valid 'meas_type' in 'logG()'")
 

@@ -98,6 +98,7 @@ See the documentation of `SMC` for more details.
 from __future__ import division, print_function
 
 import numpy as np
+import torch
 from scipy import stats
 
 from particles import collectors
@@ -364,7 +365,8 @@ class SMC(object):
             self.wgts = self.wgts.add(self.fk.logG(self.t, self.Xp, self.X, meas_type = 'nothing'))
         else:
             if always_update_weights or just_resampled or mag_meas_is_new:
-                self.wgts = self.wgts.add(self.fk.logG(self.t, self.Xp, self.X, meas_type = 'mag'))
+                log_distribution = self.fk.logG(self.t, self.Xp, self.X, meas_type = 'mag')
+                self.wgts = self.wgts.add(log_distribution)
             
         ##### X Position Update #####
         if self.data['use_gt_x_meas']:
@@ -381,6 +383,54 @@ class SMC(object):
         ##### Altimeter Measurement Update #####
         if self.data['use_altimeter']:
             self.wgts = self.wgts.add(self.fk.logG(self.t, self.Xp, self.X, meas_type = 'alt'))
+
+        ##### Enforce Spatial Constraints #####
+        if self.data['constrain_particles']:
+
+            # Compute which particles have violated the specified boundaries
+            (violations, particle_is_outOfBounds) = self.fk.logG(self.t, self.Xp, self.X, meas_type = 'constrain')
+
+            # If all particles are out of bounds, we need to reset their positions to something in bounds
+            # We'll also zero their velocities since innacurate velocity estimates are primarily why boundaries are violated
+            # Finally, we'll reset their weights to be equal since we've effectively made a whole new batch of particles
+            if particle_is_outOfBounds.all():
+                x_is_violated = violations[:, 0:2]
+                y_is_violated = violations[:, 2:4]
+                z_is_violated = violations[:, 4:6]
+
+                if x_is_violated.any():
+                    # Assuming if first particle violated upper/lower bound, then all will violate the same bound
+                    x_replacement = self.data['particle_limits_all'][0, x_is_violated[0,:]]
+                    x_vel_replacement = 0
+                    self.X[:, 0] = torch.from_numpy(x_replacement)
+                    self.X[:, 3] = x_vel_replacement
+
+
+                if y_is_violated.any():
+                    # Assuming if first particle violated upper/lower bound, then all will violate the same bound
+                    y_replacement = self.data['particle_limits_all'][1, y_is_violated[0,:]]
+                    y_vel_replacement = 0
+                    self.X[:, 1] = torch.from_numpy(y_replacement)
+                    self.X[:, 4] = y_vel_replacement
+
+                if z_is_violated.any():
+                    # Assuming if first particle violated upper/lower bound, then all will violate the same bound
+                    z_replacement = self.data['particle_limits_all'][2, z_is_violated[0,:]]
+                    z_vel_replacement = 0
+                    self.X[:, 2] = torch.from_numpy(z_replacement)
+                    self.X[:, 5] = z_vel_replacement
+
+                # Reset the weights since we've basically made new particles (will sometimes be redundant with the while-loop)
+                self.reset_weights()
+
+            # If only some of the particles violate the boundary, set their weights to zero 
+            # (i.e. log of their weights to negative infinity)
+            if particle_is_outOfBounds.any():
+                delta = np.zeros(self.wgts.lw.size)
+                delta[particle_is_outOfBounds] = -np.inf
+                self.wgts = self.wgts.add(delta)
+
+            
 
 
     def resample_move(self):
@@ -441,6 +491,13 @@ class SMC(object):
                 self.resample_move()
 
         self.reweight_particles()
+
+        # Not sure if this actually matters, but code seems to assume these two are the same
+        # And now things are breaking when I hack in constraints
+        self.aux = self.wgts 
+
+        # if self.t >=1 and np.where(self.aux.W == 0.0)[0].size >= self.N-2:
+        #     print(np.where(self.aux.W == 0.0))
 
         self.compute_summaries()
         self.t += 1
