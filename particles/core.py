@@ -100,6 +100,7 @@ from __future__ import division, print_function
 import numpy as np
 import torch
 from scipy import stats
+import time
 
 from particles import collectors
 from particles import hilbert
@@ -360,6 +361,123 @@ class SMC(object):
         always_update_weights = self.data['always_update_weights']
         ignore_mag_meas = self.data['ignore_mag_meas']
 
+        ##### Enforce Spatial Constraints #####
+        if self.data['constrain_particles']:
+
+            # Compute which particles have violated the specified boundaries
+            (violations, particle_is_outOfBounds) = self.fk.logG(self.t, self.Xp, self.X, meas_type = 'constrain')
+
+            # If all particles are out of bounds, we need to reset their positions to something in bounds
+            # We'll also zero their velocities since innacurate velocity estimates are primarily why boundaries are violated
+            # Finally, we'll reset their weights to be equal since we've effectively made a whole new batch of particles
+            while particle_is_outOfBounds.all():
+                x_is_violated = violations[:, 0:2]
+                y_is_violated = violations[:, 2:4]
+                z_is_violated = violations[:, 4:6]
+                
+
+                if x_is_violated.any():
+                    # Get Desired destination value for x component of violated particles
+                    x_des = self.data['particle_reset_pos'][0, :]
+
+                    # Compute the replacement positions 
+                    # Values will either be from 'particle_reset_pos' if partcle is in violation, or '0' if particle is fine
+                    x_replacement = x_is_violated * x_des
+                    x_replacement = x_replacement.sum(axis=1) # All valid constraints will be zero from the multiplication, 
+                    
+                    # Replacement velocity will always be zero (I don't want to cheat and use ground-truth)
+                    # # Picking a random velocity may only exacerbate the problem 
+                    # Since velocity isnt' directly observaso summing gives us the value we want to replace withble by any of our measurement models, it sometimes runs away unboundedly
+                    x_vel_replacement = 0
+
+                    # Indices of 'self.X' where x constraint was violated
+                    x_replacement_indx = x_replacement != 0
+                    
+                    # Replace constraint-violators' x position
+                    self.X[x_replacement_indx, 0] = torch.from_numpy(x_replacement[x_replacement_indx])
+
+                    # Replace constraint-violators' x position
+                    self.X[x_replacement_indx, 3] = x_vel_replacement
+
+                    # Debug Message
+                    print("Resampling %d x axis particles on iteration %d" % (np.sum(x_replacement_indx), self.t))
+
+                    # Update 'particle_is_outOfBounds' and start loop over to see if other axes need to be checked
+                    (violations, particle_is_outOfBounds) = self.fk.logG(self.t, self.Xp, self.X, meas_type = 'constrain')
+                    continue
+
+
+                if y_is_violated.any():
+                    # Get Desired destination value for y component of violated particles
+                    y_des = self.data['particle_reset_pos'][1, :]
+
+                    # Compute the replacement positions 
+                    # Values will either be from 'particle_reset_pos' if partcle is in violation, or '0' if particle is fine
+                    y_replacement = y_is_violated * y_des
+                    y_replacement = y_replacement.sum(axis=1)
+
+                    # Replacement velocity will always be zero (I don't want to cheat and use ground-truth)
+                    # Picking a random velocity may only exacerbate the problem 
+                    # Since velocity isnt' directly observable by any of our measurement models, it sometimes runs away unboundedly
+                    y_vel_replacement = 0
+
+                    # Indices of 'self.X' where y constraint was violated
+                    y_replacement_indx = y_replacement != 0
+                    
+                    # Replace constraint-violators' y position
+                    self.X[y_replacement_indx, 1] = torch.from_numpy(y_replacement[y_replacement_indx])
+
+                    # Replace constraint-violators' y position
+                    self.X[y_replacement_indx, 4] = y_vel_replacement
+
+                    # Debug Message
+                    print("Resampling %d y axis particles on iteration %d" % (np.sum(y_replacement_indx), self.t))
+
+                    # Update 'particle_is_outOfBounds' and start loop over to see if other axes need to be checked
+                    (violations, particle_is_outOfBounds) = self.fk.logG(self.t, self.Xp, self.X, meas_type = 'constrain')
+                    continue
+
+                if z_is_violated.any():
+                    # Get Desired destination value for z component of violated particles
+                    z_des = self.data['particle_reset_pos'][2, :]
+
+                    # Compute the replacement positions 
+                    # Values will either be from 'particle_reset_pos' if partcle is in violation, or '0' if particle is fine
+                    z_replacement = z_is_violated * z_des
+                    z_replacement = z_replacement.sum(axis=1)
+
+                    # Replacement velocity will always be zero (I don't want to cheat and use ground-truth)
+                    # Picking a random velocity may only exacerbate the problem 
+                    # Since velocity isnt' directly observable by any of our measurement models, it sometimes runs away unboundedly
+                    z_vel_replacement = 0
+
+                    # Indices of 'self.X' where z constraint was violated
+                    z_replacement_indx = z_replacement != 0
+                    
+                    # Replace constraint-violators' z position
+                    self.X[z_replacement_indx, 2] = torch.from_numpy(z_replacement[z_replacement_indx])
+
+                    # Replace constraint-violators' z position
+                    self.X[z_replacement_indx, 5] = z_vel_replacement
+
+                    # Debug Message
+                    print("Resampling %d z axis particles on iteration %d" % (np.sum(z_replacement_indx), self.t))
+
+                    # Update 'particle_is_outOfBounds' and start loop over to see if other axes need to be checked
+                    (violations, particle_is_outOfBounds) = self.fk.logG(self.t, self.Xp, self.X, meas_type = 'constrain')
+                    continue
+
+
+                # Reset the weights since we've basically made new particles (will sometimes be redundant with the while-loop)
+                self.reset_weights()
+
+            # If only some of the particles violate the boundary, set their weights to zero 
+            # (i.e. set the log() of their weights to negative infinity)
+            if particle_is_outOfBounds.any():
+                delta = np.zeros(self.wgts.lw.size)
+                delta[particle_is_outOfBounds] = -np.inf
+                self.wgts = self.wgts.add(delta)
+
         ##### Magnetometer Update #####
         if ignore_mag_meas:
             self.wgts = self.wgts.add(self.fk.logG(self.t, self.Xp, self.X, meas_type = 'nothing'))
@@ -384,54 +502,6 @@ class SMC(object):
         if self.data['use_altimeter']:
             self.wgts = self.wgts.add(self.fk.logG(self.t, self.Xp, self.X, meas_type = 'alt'))
 
-        ##### Enforce Spatial Constraints #####
-        if self.data['constrain_particles']:
-
-            # Compute which particles have violated the specified boundaries
-            (violations, particle_is_outOfBounds) = self.fk.logG(self.t, self.Xp, self.X, meas_type = 'constrain')
-
-            # If all particles are out of bounds, we need to reset their positions to something in bounds
-            # We'll also zero their velocities since innacurate velocity estimates are primarily why boundaries are violated
-            # Finally, we'll reset their weights to be equal since we've effectively made a whole new batch of particles
-            if particle_is_outOfBounds.all():
-                x_is_violated = violations[:, 0:2]
-                y_is_violated = violations[:, 2:4]
-                z_is_violated = violations[:, 4:6]
-
-                if x_is_violated.any():
-                    # Assuming if first particle violated upper/lower bound, then all will violate the same bound
-                    x_replacement = self.data['particle_limits_all'][0, x_is_violated[0,:]]
-                    x_vel_replacement = 0
-                    self.X[:, 0] = torch.from_numpy(x_replacement)
-                    self.X[:, 3] = x_vel_replacement
-
-
-                if y_is_violated.any():
-                    # Assuming if first particle violated upper/lower bound, then all will violate the same bound
-                    y_replacement = self.data['particle_limits_all'][1, y_is_violated[0,:]]
-                    y_vel_replacement = 0
-                    self.X[:, 1] = torch.from_numpy(y_replacement)
-                    self.X[:, 4] = y_vel_replacement
-
-                if z_is_violated.any():
-                    # Assuming if first particle violated upper/lower bound, then all will violate the same bound
-                    z_replacement = self.data['particle_limits_all'][2, z_is_violated[0,:]]
-                    z_vel_replacement = 0
-                    self.X[:, 2] = torch.from_numpy(z_replacement)
-                    self.X[:, 5] = z_vel_replacement
-
-                # Reset the weights since we've basically made new particles (will sometimes be redundant with the while-loop)
-                self.reset_weights()
-
-            # If only some of the particles violate the boundary, set their weights to zero 
-            # (i.e. log of their weights to negative infinity)
-            if particle_is_outOfBounds.any():
-                delta = np.zeros(self.wgts.lw.size)
-                delta[particle_is_outOfBounds] = -np.inf
-                self.wgts = self.wgts.add(delta)
-
-            
-
 
     def resample_move(self):
         self.rs_flag = self.fk.time_to_resample(self)
@@ -440,6 +510,13 @@ class SMC(object):
             # we always resample self.N particles, even if smc.X has a
             # different size (example: waste-free)
             self.Xp = self.X[self.A]
+
+            # Jitter each particle so there aren't redundant ones
+            t_start = time.time()
+            self.Xp += np.random.multivariate_normal([0, 0, 0, 0, 0, 0], self.fk.ssm.P_resampling, self.Xp.shape[0])
+            t_end = time.time()
+            resample_jitter_runtime = t_end - t_start
+            # print("\t Resampling at iteration %d. This took %0.7fs" % (self.t, resample_jitter_runtime))
             self.reset_weights()
         else:
             self.A = np.arange(self.N)

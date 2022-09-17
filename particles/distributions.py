@@ -757,7 +757,7 @@ class MvNormal(ProbDist):
         err_msg = 'mvnorm: argument cov must be a dxd ndarray, \
                 with d>1, defining a symmetric positive matrix'
         try:
-            if self.cov.dim() == 3:
+            if len(self.cov.shape) == 3:
                 self.L = np.linalg.cholesky(self.cov)
                 self.halflogdetcor = np.sum(self.L[:,(0,1,2),(0,1,2)], axis=1).shape
                 # self.L = np.array(self.cov * 0 )
