@@ -361,6 +361,12 @@ class SMC(object):
         always_update_weights = self.data['always_update_weights']
         ignore_mag_meas = self.data['ignore_mag_meas']
 
+        # Same idea with altimeter. Only re-weight particles if the measurement is actually new
+        # However, altimeter sampels at 5Hz so altimeter can actuallt get pretty old in general. 
+        # Thus, even on resampling timestamps, we won't use altimeter unless its actually a new measurement
+        if self.data['use_altimeter']:
+            alt_is_new = self.data['vl53l1x_time_change'][self.t] != 0.0
+
         ##### Enforce Spatial Constraints #####
         if self.data['constrain_particles']:
 
@@ -499,7 +505,7 @@ class SMC(object):
             self.wgts = self.wgts.add(self.fk.logG(self.t, self.Xp, self.X, meas_type = 'gt_z'))
 
         ##### Altimeter Measurement Update #####
-        if self.data['use_altimeter']:
+        if self.data['use_altimeter'] and alt_is_new:
             self.wgts = self.wgts.add(self.fk.logG(self.t, self.Xp, self.X, meas_type = 'alt'))
 
 
