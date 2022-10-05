@@ -347,7 +347,8 @@ class Bootstrap(particles.FeynmanKac):
             return self.ssm.PY(t, xp, x).logpdf(self.data[t])
         else:
             # This is an obtuse way of making a zero vector, but it ensures I preserve Numpy Array vs Pytorch Tensor consistency
-            zero_vec = self.data['mag_pni_meas_world'][t, :]*0
+            zero_vec = self.data['mag_pni_meas_world'][t, :]*0.0
+            zero_scalar = zero_vec[0]
 
             if meas_type == 'mag':
                 # Evaluate each particle's distribution at zero
@@ -361,7 +362,7 @@ class Bootstrap(particles.FeynmanKac):
             elif meas_type == 'gt_z':
                 return self.ssm.PY_gt_z(t, xp, x, self.data).logpdf(zero_vec)
             elif meas_type == 'alt':
-                return self.ssm.PY_altimeter(t, xp, x, self.data).logpdf(zero_vec)
+                return self.ssm.PY_altimeter(t, xp, x, self.data).logpdf(zero_scalar)
             elif meas_type == 'constrain':
                 return self.ssm.PY_constrain(t, xp, x, self.data)
             else:
