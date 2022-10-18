@@ -353,6 +353,8 @@ class Bootstrap(particles.FeynmanKac):
             if meas_type == 'mag':
                 # Evaluate each particle's distribution at zero
                 return self.ssm.PY_mag(t, xp, x, self.data).logpdf(zero_vec)
+            elif meas_type == 'mag_norm':
+                return self.ssm.PY_mag_norm(t, xp, x, self.data).logpdf(zero_scalar)
             elif meas_type == 'nothing':
                 return self.ssm.PY_nothing(t, xp, x, self.data).logpdf(zero_vec)
             elif meas_type == 'gt_x':

@@ -476,6 +476,7 @@ class SMC(object):
 
                 # Reset the weights since we've basically made new particles (will sometimes be redundant with the while-loop)
                 self.reset_weights()
+                # just_resampled = True
 
             # If only some of the particles violate the boundary, set their weights to zero 
             # (i.e. set the log() of their weights to negative infinity)
@@ -486,10 +487,21 @@ class SMC(object):
 
         ##### Magnetometer Update #####
         if ignore_mag_meas:
+            # Always skip magnetometer
             self.wgts = self.wgts.add(self.fk.logG(self.t, self.Xp, self.X, meas_type = 'nothing'))
         else:
+            # If we always use magnetometer OR we just resampled OR there is a new mag_measurement...
+            # Then update weights according to magnetometer measurements
             if always_update_weights or just_resampled or mag_meas_is_new:
-                log_distribution = self.fk.logG(self.t, self.Xp, self.X, meas_type = 'mag')
+                if self.data['mag_meas_model_type'] == "vec":
+                    # Use full 3 axes of magnetometer measurement
+                    log_distribution = self.fk.logG(self.t, self.Xp, self.X, meas_type = 'mag')
+                elif self.data['mag_meas_model_type'] == "norm":
+                    # Use only norm of magnetometer measurement
+                    log_distribution = self.fk.logG(self.t, self.Xp, self.X, meas_type = 'mag_norm')
+                else:
+                    print("'mag_meas_model_tye' must be 'vec' or 'norm'")
+                    exit()
                 self.wgts = self.wgts.add(log_distribution)
             
         ##### X Position Update #####
